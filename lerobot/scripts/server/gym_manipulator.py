@@ -1116,6 +1116,199 @@ class GamepadControlWrapper(gym.Wrapper):
         return self.env.close()
 
 
+# class SpacemouseControlWrapper(gym.Wrapper):
+#     """
+#     Wrapper that allows controlling a gym environment with a spacemouse.
+
+#     This wrapper intercepts the step method and allows human input via spacemouse
+#     to override the agent's actions when desired.
+#     """
+
+#     def __init__(
+#         self,
+#         env,
+#         x_step_size=1.0,
+#         y_step_size=1.0,
+#         z_step_size=1.0,
+#         use_gripper=False,
+#         auto_reset=False,
+#         input_threshold=0.001,
+#     ):
+#         """
+#         Initialize the gamepad controller wrapper.
+
+#         cfg.
+#             env: The environment to wrap
+#             x_step_size: Base movement step size for X axis in meters
+#             y_step_size: Base movement step size for Y axis in meters
+#             z_step_size: Base movement step size for Z axis in meters
+#             vendor_id: USB vendor ID of the gamepad (default: Logitech)
+#             product_id: USB product ID of the gamepad (default: RumblePad 2)
+#             auto_reset: Whether to auto reset the environment when episode ends
+#             input_threshold: Minimum movement delta to consider as active input
+#         """
+#         super().__init__(env)
+
+#         self.auto_reset = auto_reset
+#         self.use_gripper = use_gripper
+#         self.input_threshold = input_threshold
+#         self.x_step_size = x_step_size
+#         self.y_step_size = y_step_size
+#         self.z_step_size = z_step_size
+#         self.is_intervention = False
+#         self._close_gripper = False
+#         self._delta_pos = numpy.zeros(3)
+
+#         self.controller = pyspacemouse.open(
+#             dof_callback=self._cb_dof,  # type: ignore
+#             button_callback=self._cb_button,  # type: ignore
+#         )
+#         if not self.controller:
+#             raise Exception("Failed to open a SpaceMouse device. Is it connected?")
+
+#         # logging.info("Gamepad control wrapper initialized")
+#         # print("Gamepad controls:")
+#         # print("  Left analog stick: Move in X-Y plane")
+#         # print("  Right analog stick: Move in Z axis (up/down)")
+#         # print("  X/Square button: End episode (FAILURE)")
+#         # print("  Y/Triangle button: End episode (SUCCESS)")
+#         # print("  B/Circle button: Exit program")
+
+#     def _cb_dof(self, state: pyspacemouse.SpaceNavigator):
+#         self._delta_pos = numpy.array(
+#             [
+#                 state.y * self.x_step_size,
+#                 -state.x * self.y_step_size,
+#                 state.z * self.z_step_size,
+#             ]
+#         )
+#         self._delta_rot = numpy.array(
+#             [
+#                 -state.roll * self.x_step_size,
+#                 -state.pitch * self.y_step_size,
+#                 -state.yaw * self.z_step_size,
+#             ]
+#         )
+
+#     def _cb_button(self, state: pyspacemouse.SpaceNavigator, buttons: List[bool]):
+#         if buttons[0]:
+#             self.is_intervention = not self.is_intervention
+#         if buttons[1]:
+#             self._close_gripper = not self._close_gripper
+#         # if all(buttons):
+#         #     pass
+
+#     def get_gamepad_action(self):
+#         """
+#         Get the current action from the gamepad if any input is active.
+
+#         Returns:
+#             Tuple of (is_active, action, terminate_episode, success)
+#         """
+#         # Create action from gamepad input
+#         gamepad_action = self._delta_pos
+#         # rot_vec = Rotation.from_euler("XYZ", self._delta_rot).as_rotvec()
+
+#         if self.use_gripper:
+#             if self._close_gripper:
+#                 gamepad_action = np.concatenate([gamepad_action, [0.0]])
+#             else:
+#                 gamepad_action = np.concatenate([gamepad_action, [2.0]])
+
+#         # Check episode ending buttons
+#         # We'll rely on controller.get_episode_end_status() which returns "success", "failure", or None
+#         episode_end_status = self.controller.get_episode_end_status()
+#         terminate_episode = False
+#         success = episode_end_status == "success"
+#         rerecord_episode = episode_end_status == "rerecord_episode"
+
+#         return (
+#             self.is_intervention,
+#             gamepad_action,
+#             terminate_episode,
+#             success,
+#             rerecord_episode,
+#         )
+
+#     def step(self, action):
+#         """
+#         Step the environment, using gamepad input to override actions when active.
+
+#         cfg.
+#             action: Original action from agent
+
+#         Returns:
+#             observation, reward, terminated, truncated, info
+#         """
+#         # Get gamepad state and action
+#         (
+#             is_intervention,
+#             gamepad_action,
+#             terminate_episode,
+#             success,
+#             rerecord_episode,
+#         ) = self.get_gamepad_action()
+
+#         # Update episode ending state if requested
+#         if terminate_episode:
+#             logging.info(
+#                 f"Episode manually ended: {'SUCCESS' if success else 'FAILURE'}"
+#             )
+
+#         # Only override the action if gamepad is active
+#         if is_intervention:
+#             # Format according to the expected action type
+#             if isinstance(self.action_space, gym.spaces.Tuple):
+#                 # For environments that use (action, is_intervention) tuples
+#                 final_action = (torch.from_numpy(gamepad_action), False)
+#             else:
+#                 final_action = torch.from_numpy(gamepad_action)
+
+#         else:
+#             # Use the original action
+#             final_action = action
+
+#         # Step the environment
+#         obs, reward, terminated, truncated, info = self.env.step(final_action)
+
+#         # Add episode ending if requested via gamepad
+#         terminated = terminated or truncated or terminate_episode
+
+#         if success:
+#             reward = 1.0
+#             logging.info("Episode ended successfully with reward 1.0")
+
+#         info["is_intervention"] = is_intervention
+#         action_intervention = (
+#             final_action[0] if isinstance(final_action, Tuple) else final_action
+#         )
+#         if isinstance(action_intervention, np.ndarray):
+#             action_intervention = torch.from_numpy(action_intervention)
+#         info["action_intervention"] = action_intervention
+#         info["rerecord_episode"] = rerecord_episode
+
+#         # If episode ended, reset the state
+#         if terminated or truncated:
+#             # Add success/failure information to info dict
+#             info["next.success"] = success
+
+#             # Auto reset if configured
+#             if self.auto_reset:
+#                 obs, reset_info = self.reset()
+#                 info.update(reset_info)
+
+#         return obs, reward, terminated, truncated, info
+
+#     def close(self):
+#         """Clean up resources when environment closes."""
+#         # Stop the controller
+#         if hasattr(self, "controller"):
+#             self.controller.stop()
+
+#         # Call the parent close method
+#         return self.env.close()
+
+
 class ActionScaleWrapper(gym.ActionWrapper):
     def __init__(self, env, ee_action_space_params=None):
         super().__init__(env)
@@ -1213,6 +1406,8 @@ def make_robot_env(cfg) -> gym.vector.VectorEnv:
         )
     else:
         env = KeyboardInterfaceWrapper(env=env)
+
+    # TODO: Add spacemouse interface wrapper
 
     env = ResetWrapper(
         env=env,
