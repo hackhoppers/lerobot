@@ -243,8 +243,8 @@
                     "fps": 15
                 },
                 "front": {
-                    "type": "opencv",
-                    "camera_index": 8,
+                    "type": "intelrealsense",
+                    "name": "Intel RealSense D405",
                     "height": 480,
                     "width": 640,
                     "fps": 15
@@ -306,7 +306,7 @@
                         0.0433196
                     ]
                 },
-                "use_gamepad": true
+                "use_gamepad": false
             }
         },
         "name": "real_robot",
