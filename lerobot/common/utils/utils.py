@@ -182,9 +182,9 @@ def say(text, blocking=False):
         cmd = ["say", text]
 
     elif system == "Linux":
-        cmd = ["spd-say", text]
-        if blocking:
-            cmd.append("--wait")
+        cmd = ["echo", text]
+        # if blocking:
+        #     cmd.append("--wait")
 
     elif system == "Windows":
         cmd = [

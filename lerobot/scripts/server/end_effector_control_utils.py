@@ -123,6 +123,8 @@ class KeyboardController(InputController):
                     self.key_states["backward_z"] = True
                 elif key == keyboard.Key.shift_r:
                     self.key_states["forward_z"] = True
+                elif key == keyboard.Key.alt:
+                    self.intervention_flag = not self.intervention_flag
                 elif key == keyboard.Key.esc:
                     self.key_states["quit"] = True
                     self.running = False
@@ -171,6 +173,10 @@ class KeyboardController(InputController):
         """Stop the keyboard listener."""
         if self.listener and self.listener.is_alive():
             self.listener.stop()
+
+    def should_intervene(self):
+        """Return True if intervention flag was set."""
+        return self.intervention_flag
 
     def get_deltas(self):
         """Get the current movement deltas from keyboard state."""

@@ -849,13 +849,11 @@ class EEActionWrapper(gym.ActionWrapper):
         self.kinematics = RobotKinematics(robot_type)
         self.fk_function = self.kinematics.fk_gripper_tip
 
-        action_space_bounds = np.array(
-            [
-                ee_action_space_params.x_step_size,
-                ee_action_space_params.y_step_size,
-                ee_action_space_params.z_step_size,
-            ]
-        )
+        action_space_bounds = np.array([
+            ee_action_space_params.x_step_size,
+            ee_action_space_params.y_step_size,
+            ee_action_space_params.z_step_size,
+        ])
         if self.use_gripper:
             # gripper actions open at 2.0, and closed at 0.0
             min_action_space_bounds = np.concatenate([-action_space_bounds, [0.0]])
@@ -934,6 +932,177 @@ class EEObservationWrapper(gym.ObservationWrapper):
             dim=-1,
         )
         return observation
+
+
+class KeyboardControlWrapper(gym.Wrapper):
+    """
+    Wrapper that allows controlling a gym environment with a gamepad.
+
+    This wrapper intercepts the step method and allows human input via gamepad
+    to override the agent's actions when desired.
+    """
+
+    def __init__(
+        self,
+        env,
+        x_step_size=1.0,
+        y_step_size=1.0,
+        z_step_size=1.0,
+        use_gripper=False,
+        auto_reset=False,
+        input_threshold=0.001,
+    ):
+        """
+        Initialize the gamepad controller wrapper.
+
+        cfg.
+            env: The environment to wrap
+            x_step_size: Base movement step size for X axis in meters
+            y_step_size: Base movement step size for Y axis in meters
+            z_step_size: Base movement step size for Z axis in meters
+            vendor_id: USB vendor ID of the gamepad (default: Logitech)
+            product_id: USB product ID of the gamepad (default: RumblePad 2)
+            auto_reset: Whether to auto reset the environment when episode ends
+            input_threshold: Minimum movement delta to consider as active input
+        """
+        super().__init__(env)
+        from lerobot.scripts.server.end_effector_control_utils import (
+            KeyboardController,
+        )
+
+        self.controller = KeyboardController(
+            x_step_size=x_step_size,
+            y_step_size=y_step_size,
+            z_step_size=z_step_size,
+        )
+        self.auto_reset = auto_reset
+        self.use_gripper = use_gripper
+        self.input_threshold = input_threshold
+        self.controller.start()
+
+        logging.info("Gamepad control wrapper initialized")
+        print("Gamepad controls:")
+        print("  Left analog stick: Move in X-Y plane")
+        print("  Right analog stick: Move in Z axis (up/down)")
+        print("  X/Square button: End episode (FAILURE)")
+        print("  Y/Triangle button: End episode (SUCCESS)")
+        print("  B/Circle button: Exit program")
+
+    def get_gamepad_action(self):
+        """
+        Get the current action from the gamepad if any input is active.
+
+        Returns:
+            Tuple of (is_active, action, terminate_episode, success)
+        """
+        # Update the controller to get fresh inputs
+        self.controller.update()
+
+        # Get movement deltas from the controller
+        delta_x, delta_y, delta_z = self.controller.get_deltas()
+
+        intervention_is_active = self.controller.should_intervene()
+
+        # Create action from gamepad input
+        gamepad_action = np.array([delta_x, delta_y, delta_z], dtype=np.float32)
+
+        if self.use_gripper:
+            gripper_command = self.controller.gripper_command()
+            if gripper_command == "open":
+                gamepad_action = np.concatenate([gamepad_action, [2.0]])
+            elif gripper_command == "close":
+                gamepad_action = np.concatenate([gamepad_action, [0.0]])
+            else:
+                gamepad_action = np.concatenate([gamepad_action, [1.0]])
+
+        # Check episode ending buttons
+        # We'll rely on controller.get_episode_end_status() which returns "success", "failure", or None
+        episode_end_status = self.controller.get_episode_end_status()
+        terminate_episode = episode_end_status is not None
+        success = episode_end_status == "success"
+        rerecord_episode = episode_end_status == "rerecord_episode"
+
+        return (
+            intervention_is_active,
+            gamepad_action,
+            terminate_episode,
+            success,
+            rerecord_episode,
+        )
+
+    def step(self, action):
+        """
+        Step the environment, using gamepad input to override actions when active.
+
+        cfg.
+            action: Original action from agent
+
+        Returns:
+            observation, reward, terminated, truncated, info
+        """
+        # Get gamepad state and action
+        (
+            is_intervention,
+            gamepad_action,
+            terminate_episode,
+            success,
+            rerecord_episode,
+        ) = self.get_gamepad_action()
+
+        # Update episode ending state if requested
+        if terminate_episode:
+            logging.info(f"Episode manually ended: {'SUCCESS' if success else 'FAILURE'}")
+
+        # Only override the action if gamepad is active
+        if is_intervention:
+            # Format according to the expected action type
+            if isinstance(self.action_space, gym.spaces.Tuple):
+                # For environments that use (action, is_intervention) tuples
+                final_action = (torch.from_numpy(gamepad_action), False)
+            else:
+                final_action = torch.from_numpy(gamepad_action)
+
+        else:
+            # Use the original action
+            final_action = action
+
+        # Step the environment
+        obs, reward, terminated, truncated, info = self.env.step(final_action)
+
+        # Add episode ending if requested via gamepad
+        terminated = terminated or truncated or terminate_episode
+
+        if success:
+            reward = 1.0
+            logging.info("Episode ended successfully with reward 1.0")
+
+        info["is_intervention"] = is_intervention
+        action_intervention = final_action[0] if isinstance(final_action, Tuple) else final_action
+        if isinstance(action_intervention, np.ndarray):
+            action_intervention = torch.from_numpy(action_intervention)
+        info["action_intervention"] = action_intervention
+        info["rerecord_episode"] = rerecord_episode
+
+        # If episode ended, reset the state
+        if terminated or truncated:
+            # Add success/failure information to info dict
+            info["next.success"] = success
+
+            # Auto reset if configured
+            if self.auto_reset:
+                obs, reset_info = self.reset()
+                info.update(reset_info)
+
+        return obs, reward, terminated, truncated, info
+
+    def close(self):
+        """Clean up resources when environment closes."""
+        # Stop the controller
+        if hasattr(self, "controller"):
+            self.controller.stop()
+
+        # Call the parent close method
+        return self.env.close()
 
 
 class GamepadControlWrapper(gym.Wrapper):
@@ -1313,15 +1482,13 @@ class ActionScaleWrapper(gym.ActionWrapper):
     def __init__(self, env, ee_action_space_params=None):
         super().__init__(env)
         assert ee_action_space_params is not None, "TODO: method implemented for ee action space only so far"
-        self.scale_vector = np.array(
+        self.scale_vector = np.array([
             [
-                [
-                    ee_action_space_params.x_step_size,
-                    ee_action_space_params.y_step_size,
-                    ee_action_space_params.z_step_size,
-                ]
+                ee_action_space_params.x_step_size,
+                ee_action_space_params.y_step_size,
+                ee_action_space_params.z_step_size,
             ]
-        )
+        ])
 
     def action(self, action):
         is_intervention = False
@@ -1405,7 +1572,14 @@ def make_robot_env(cfg) -> gym.vector.VectorEnv:
             use_gripper=cfg.wrapper.use_gripper,
         )
     else:
-        env = KeyboardInterfaceWrapper(env=env)
+        # env = KeyboardInterfaceWrapper(env=env)
+        env = KeyboardControlWrapper(
+            env=env,
+            x_step_size=cfg.wrapper.ee_action_space_params.x_step_size,
+            y_step_size=cfg.wrapper.ee_action_space_params.y_step_size,
+            z_step_size=cfg.wrapper.ee_action_space_params.z_step_size,
+            use_gripper=cfg.wrapper.use_gripper,
+        )
 
     # TODO: Add spacemouse interface wrapper
 
@@ -1554,8 +1728,9 @@ def record_dataset(env, policy, cfg):
             logging.info(f"Re-recording episode {episode_index}")
             continue
 
-        dataset.save_episode(cfg.task)
-        episode_index += 1
+        # TODO: Re-enable
+        # dataset.save_episode(cfg.task)
+        # episode_index += 1
 
     # Finalize dataset
     # dataset.consolidate(run_compute_stats=True)

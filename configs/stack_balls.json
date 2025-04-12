@@ -128,7 +128,6 @@
                     -0.03,
                     -0.03,
                     0.0
-
                 ],
                 "max": [
                     0.03,
@@ -262,13 +261,13 @@
                     207,
                     180,
                     200
-            ],
+                ],
                 "observation.images.front": [
                     180,
                     250,
                     120,
                     150
-            ]
+                ]
             },
             "resize_size": [
                 128,
@@ -310,7 +309,7 @@
             }
         },
         "name": "real_robot",
-        "mode": null,
+        "mode": "record",
         "repo_id": null,
         "dataset_root": null,
         "task": "",
@@ -356,5 +355,4 @@
             "config_path": null
         }
     }
-
 }
