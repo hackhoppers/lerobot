@@ -15,7 +15,7 @@
         "disable_artifact": true
     },
     "dataset": {
-        "repo_id": "aractingi/pick_lift_cube_two_cameras_gripper_penalty",
+        "repo_id": "AndrejOrsula/stack_balls_rl_v1",
         "use_imagenet_stats": false
     },
     "policy": {
@@ -124,15 +124,15 @@
             },
             "action": {
                 "min": [
-                    -0.03,
-                    -0.03,
-                    -0.03,
+                    -0.05,
+                    -0.05,
+                    -0.05,
                     0.0
                 ],
                 "max": [
-                    0.03,
-                    0.03,
-                    0.03,
+                    0.05,
+                    0.05,
+                    0.05,
                     2.0
                 ]
             }
@@ -257,16 +257,16 @@
             "add_ee_pose_to_observation": true,
             "crop_params_dict": {
                 "observation.images.side": [
-                    180,
-                    207,
-                    180,
-                    200
+                    0,
+                    0,
+                    240,
+                    480
                 ],
                 "observation.images.front": [
-                    180,
-                    250,
-                    120,
-                    150
+                    63,
+                    256,
+                    312,
+                    376
                 ]
             },
             "resize_size": [
@@ -277,43 +277,43 @@
             "use_gripper": true,
             "gripper_quantization_threshold": null,
             "gripper_penalty": -0.05,
-            "gripper_penalty_in_reward": true,
-            "open_gripper_on_reset": false,
+            "gripper_penalty_in_reward": false,
+            "open_gripper_on_reset": true,
             "fixed_reset_joint_positions": [
-                -0.0,
+                0.0,
                 105.0,
                 90.0,
                 80.0,
                 -90.0,
                 20.0
             ],
-            "reset_time_s": 2.5,
+            "reset_time_s": 10.0,
             "joint_masking_action_space": null,
             "ee_action_space_params": {
-                "x_step_size": 0.03,
-                "y_step_size": 0.03,
-                "z_step_size": 0.03,
+                "x_step_size": 0.05,
+                "y_step_size": 0.05,
+                "z_step_size": 0.05,
                 "bounds": {
                     "max": [
-                        0.23,
-                        0.01,
-                        0.12862044
+                        0.275,
+                        0.075,
+                        0.20
                     ],
                     "min": [
-                        0.2110096,
-                        -0.01,
-                        0.0433196
+                        0.125,
+                        -0.075,
+                        0.04
                     ]
                 },
                 "use_gamepad": false
             }
         },
         "name": "real_robot",
-        "mode": "record",
-        "repo_id": null,
+        "mode": null,
+        "repo_id": "stack_balls_rl_v1",
         "dataset_root": null,
-        "task": "",
-        "num_episodes": 15,
+        "task": "stack_balls_rl_v1",
+        "num_episodes": 20,
         "episode": 0,
         "pretrained_policy_name_or_path": null,
         "device": "cuda",
