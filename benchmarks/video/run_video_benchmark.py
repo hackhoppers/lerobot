@@ -42,16 +42,14 @@ from lerobot.common.datasets.video_utils import (
 )
 from lerobot.common.utils.benchmark import TimeBenchmark
 
-BASE_ENCODING = OrderedDict(
-    [
-        ("vcodec", "libx264"),
-        ("pix_fmt", "yuv444p"),
-        ("g", 2),
-        ("crf", None),
-        # TODO(aliberts): Add fastdecode
-        # ("fastdecode", 0),
-    ]
-)
+BASE_ENCODING = OrderedDict([
+    ("vcodec", "libx264"),
+    ("pix_fmt", "yuv444p"),
+    ("g", 2),
+    ("crf", None),
+    # TODO(aliberts): Add fastdecode
+    # ("fastdecode", 0),
+])
 
 
 # TODO(rcadene, aliberts): move to `utils.py` folder when we want to refactor

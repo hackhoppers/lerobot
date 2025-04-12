@@ -246,6 +246,7 @@ def record(
     robot: Robot,
     cfg: RecordControlConfig,
 ) -> LeRobotDataset:
+    logging.getLogger().setLevel(logging.WARNING)
     # TODO(rcadene): Add option to record logs
     if cfg.resume:
         dataset = LeRobotDataset(
