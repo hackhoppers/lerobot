@@ -123,7 +123,7 @@ class KeyboardController(InputController):
                     self.key_states["backward_z"] = True
                 elif key == keyboard.Key.shift_r:
                     self.key_states["forward_z"] = True
-                elif key == keyboard.Key.alt:
+                elif key == keyboard.Key.caps_lock:
                     self.intervention_flag = not self.intervention_flag
                 elif key == keyboard.Key.esc:
                     self.key_states["quit"] = True
